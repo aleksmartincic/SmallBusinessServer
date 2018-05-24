@@ -80,14 +80,14 @@
                         "version": "latest"
                     },
                     "osDisk": {
-                        "createOption": "fromImage",
+                        "createOption": "FromImage",
                         "managedDisk": {
                             "storageAccountType": "Premium_LRS"
                         }
                     },
                     "dataDisks": [
                         {
-                            "createOption": "empty",
+                            "createOption": "Empty",
                             "lun": 0,
                             "diskSizeGB": "128",
                             "caching": "ReadOnly",
@@ -241,11 +241,11 @@
         },
         {
             "name": "[variables('publicIpAddressName')]",
-            "type": "Microsoft.Network/publicIpAddresses",
+            "type": "Microsoft.Network/publicIPAddresses",
             "apiVersion": "2017-08-01",
             "location": "[variables('location')]",
             "properties": {
-                "publicIpAllocationMethod": "[variables('publicIpAddressType')]"
+                "publicIPAllocationMethod": "[variables('publicIpAddressType')]"
             },
             "sku": {
                 "name": "[variables('publicIpAddressSku')]"

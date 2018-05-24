@@ -1,2 +1,2 @@
 # SmallBusinessServer
-# Anders sitt originaltemplate
+# Template created by Anders Dahl

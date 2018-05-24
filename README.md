@@ -1,1 +1,2 @@
 # SmallBusinessServer
+# Anders sitt originaltemplate

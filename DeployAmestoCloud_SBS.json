@@ -1,0 +1,423 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "firma": {
+            "type": "string",
+			"maxLength": 8,
+			"defaultValue": "BKH"
+        },
+        "adminPassword": {
+            "type": "securestring",
+			"minLength": 12,
+		    "defaultValue": "8K$+EgJoD/pm"
+        },
+        "sqlStorageDeploymentToken": {
+            "type": "int",
+			"defaultValue": 87131
+        }
+    },
+    "variables": {
+        "vnetId": "[resourceId('RG-AC','Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
+        "subnetRef": "[concat(variables('vnetId'), '/subnets/', variables('subnetName'))]",
+        "diagnosticsExtensionName": "IaaSDiagnostics",
+		"diagnosticsStorageAccountName": "[concat(toLower(parameters('firma')), 'acdiag792')]",
+		"diagnosticsStorageAccountId": "[concat('Microsoft.Storage/storageAccounts/',toLower(parameters('firma')), 'acdiag792')]",
+		"virtualMachineName": "[concat(parameters('firma'),'-AC')]",
+		"networkInterfaceName": "[concat(toLower(parameters('firma')), 'ac792')]",
+		"domainName": "[concat(toLower(parameters('firma')), '.local')]",
+		"location": "westeurope",
+        "virtualMachineSize": "Standard_E2s_v3",
+        "adminUsername": "lois",
+        "virtualNetworkName": "[concat(parameters('firma'),'-AC-vnet')]",
+        "networkSecurityGroupName": "[concat(parameters('firma'),'-AC-nsg')]",
+        "diagnosticsStorageAccountType": "Standard_LRS",
+        "addressPrefix": "10.0.0.0/24",
+        "subnetName": "default",
+        "subnetPrefix": "10.0.0.0/24",
+        "publicIpAddressName": "[concat(parameters('firma'),'-AC-ip')]",
+        "publicIpAddressType": "Dynamic",
+        "publicIpAddressSku": "Basic",
+        "sqlConnectivityType": "Private",
+        "sqlPortNumber": 1433,
+        "sqlStorageDisksCount": 1,
+        "sqlStorageWorkloadType": "GENERAL",
+        "sqlStorageDisksConfigurationType": "NEW",
+        "sqlStorageStartingDeviceId": 2,
+        "sqlAutopatchingDayOfWeek": "Sunday",
+        "sqlAutopatchingStartHour": "2",
+        "sqlAutopatchingWindowDuration": "60",
+        "sqlAuthenticationLogin": "ac-sa",
+        "rServicesEnabled": "false"
+    },
+    "resources": [
+        {
+            "name": "[variables('virtualMachineName')]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2016-04-30-preview",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', variables('networkInterfaceName'))]",
+                "[concat('Microsoft.Storage/storageAccounts/', variables('diagnosticsStorageAccountName'))]"
+            ],
+            "properties": {
+                "osProfile": {
+                    "computerName": "[variables('virtualMachineName')]",
+                    "adminUsername": "[variables('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]",
+                    "windowsConfiguration": {
+                        "provisionVmAgent": "true"
+                    }
+                },
+                "hardwareProfile": {
+                    "vmSize": "[variables('virtualMachineSize')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "MicrosoftSQLServer",
+                        "offer": "SQL2017-WS2016",
+                        "sku": "Web",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "fromImage",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
+                    },
+                    "dataDisks": [
+                        {
+                            "createOption": "empty",
+                            "lun": 0,
+                            "diskSizeGB": "128",
+                            "caching": "ReadOnly",
+                            "managedDisk": {
+                                "storageAccountType": "Premium_LRS"
+                            }
+                        }
+                    ]
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]"
+                        }
+                    ]
+                },
+                "diagnosticsProfile": {
+                    "bootDiagnostics": {
+                        "enabled": true,
+                        "storageUri": "[reference(resourceId('RG-AC', 'Microsoft.Storage/storageAccounts', variables('diagnosticsStorageAccountName')), '2015-06-15').primaryEndpoints['blob']]"
+                    }
+                }
+            }
+        },
+	
+		
+        {
+            "name": "[concat(variables('virtualMachineName'),'/', variables('diagnosticsExtensionName'))]",
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "apiVersion": "2017-03-30",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/', variables('virtualMachineName'))]"
+            ],
+            "properties": {
+                "publisher": "Microsoft.Azure.Diagnostics",
+                "type": "IaaSDiagnostics",
+                "typeHandlerVersion": "1.5",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                    "StorageAccount": "[variables('diagnosticsStorageAccountName')]",
+                    "WadCfg": {
+                        "DiagnosticMonitorConfiguration": {
+                            "overallQuotaInMB": 5120,
+                            "Metrics": {
+                                "resourceId": "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name, '/providers/', 'Microsoft.Compute/virtualMachines/', variables('virtualMachineName'))]",
+                                "MetricAggregation": [
+                                    {
+                                        "scheduledTransferPeriod": "PT1H"
+                                    },
+                                    {
+                                        "scheduledTransferPeriod": "PT1M"
+                                    }
+                                ]
+                            },
+                            "DiagnosticInfrastructureLogs": {
+                                "scheduledTransferLogLevelFilter": "Error"
+                            },
+                            "PerformanceCounters": {
+                                "scheduledTransferPeriod": "PT1M",
+                                "PerformanceCounterConfiguration": [
+                                    {
+                                        "counterSpecifier": "\\Memory\\% Committed Bytes In Use",
+                                        "sampleRate": "PT1M"
+                                    }
+                                ]
+                            },
+                            "WindowsEventLog": {
+                                "scheduledTransferPeriod": "PT1M",
+                                "DataSource": [
+                                    {
+                                        "name": "Application!*[System[(Level = 1 or Level = 2 or Level = 3)]]"
+                                    },
+                                    {
+                                        "name": "Security!*[System[band(Keywords,4503599627370496)]]"
+                                    },
+                                    {
+                                        "name": "System!*[System[(Level = 1 or Level = 2 or Level = 3)]]"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "protectedSettings": {
+                    "storageAccountName": "[variables('diagnosticsStorageAccountName')]",
+                    "storageAccountKey": "[listKeys(variables('diagnosticsStorageAccountId'),'2015-06-15').key1]",
+                    "storageAccountEndPoint": "https://core.windows.net/"
+                }
+            }
+        },
+        {
+            "name": "[variables('diagnosticsStorageAccountName')]",
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2015-06-15",
+            "location": "[variables('location')]",
+            "properties": {
+                "accountType": "[variables('diagnosticsStorageAccountType')]"
+            }
+        },
+        {
+            "name": "[variables('virtualNetworkName')]",
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2017-08-01",
+            "location": "[variables('location')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('addressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "[variables('subnetPrefix')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[variables('networkInterfaceName')]",
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2016-09-01",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]",
+                "[concat('Microsoft.Network/publicIpAddresses/', variables('publicIpAddressName'))]",
+                "[concat('Microsoft.Network/networkSecurityGroups/', variables('networkSecurityGroupName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIpAddress": {
+                                "id": "[resourceId('RG-AC','Microsoft.Network/publicIpAddresses', variables('publicIpAddressName'))]"
+                            }
+                        }
+                    }
+                ],
+                "networkSecurityGroup": {
+                    "id": "[resourceId('RG-AC', 'Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
+                }
+            }
+        },
+        {
+            "name": "[variables('publicIpAddressName')]",
+            "type": "Microsoft.Network/publicIpAddresses",
+            "apiVersion": "2017-08-01",
+            "location": "[variables('location')]",
+            "properties": {
+                "publicIpAllocationMethod": "[variables('publicIpAddressType')]"
+            },
+            "sku": {
+                "name": "[variables('publicIpAddressSku')]"
+            }
+        },
+        {
+            "name": "[variables('networkSecurityGroupName')]",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2017-06-01",
+            "location": "[variables('location')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "default-allow-rdp",
+                        "properties": {
+                            "priority": 1000,
+                            "protocol": "TCP",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "sourceAddressPrefix": "*",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "*",
+                            "destinationPortRange": "3389"
+                        }
+                    }
+                ]
+            }
+        },
+		
+		
+		
+		
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "name": "[concat(variables('virtualMachineName'), '/SqlIaasExtension')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/', variables('virtualMachineName'))]",
+                "[concat('Microsoft.Compute/virtualMachines/',variables('virtualMachineName'),'/extensions/', variables('diagnosticsExtensionName'))]"
+            ],
+            "properties": {
+                "type": "SqlIaaSAgent",
+                "publisher": "Microsoft.SqlServer.Management",
+                "typeHandlerVersion": "1.2",
+                "autoUpgradeMinorVersion": "true",
+                "settings": {
+                    "AutoTelemetrySettings": {
+                        "Region": "[variables('location')]"
+                    },
+                    "AutoPatchingSettings": {
+                        "PatchCategory": "WindowsMandatoryUpdates",
+                        "Enable": true,
+                        "DayOfWeek": "[variables('sqlAutopatchingDayOfWeek')]",
+                        "MaintenanceWindowStartingHour": "[variables('sqlAutopatchingStartHour')]",
+                        "MaintenanceWindowDuration": "[variables('sqlAutopatchingWindowDuration')]"
+                    },
+                    "KeyVaultCredentialSettings": {
+                        "Enable": false,
+                        "CredentialName": ""
+                    },
+                    "ServerConfigurationsManagementSettings": {
+                        "SQLConnectivityUpdateSettings": {
+                            "ConnectivityType": "[variables('sqlConnectivityType')]",
+                            "Port": "[variables('sqlPortNumber')]"
+                        },
+                        "SQLWorkloadTypeUpdateSettings": {
+                            "SQLWorkloadType": "[variables('sqlStorageWorkloadType')]"
+                        },
+                        "SQLStorageUpdateSettings": {
+                            "DiskCount": "[variables('sqlStorageDisksCount')]",
+                            "NumberOfColumns": "[variables('sqlStorageDisksCount')]",
+                            "StartingDeviceID": "[variables('sqlStorageStartingDeviceId')]",
+                            "DiskConfigurationType": "[variables('sqlStorageDisksConfigurationType')]"
+                        },
+                        "AdditionalFeaturesServerConfigurations": {
+                            "IsRServicesEnabled": "[variables('rServicesEnabled')]"
+                        }
+                    }
+                },
+                "protectedSettings": {
+                    "SQLAuthUpdateUserName": "[variables('sqlAuthenticationLogin')]",
+                    "SQLAuthUpdatePassword": "[parameters('adminPassword')]"
+                }
+            }
+        },
+		
+		
+		
+		{
+          "type": "Microsoft.Compute/virtualMachines/extensions",
+		  "name": "[concat(variables('virtualMachineName'), '/CreateADForest')]",
+          "apiVersion": "2015-06-15",
+          "location": "[resourceGroup().location]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', variables('virtualMachineName'))]",
+			"[concat('Microsoft.Compute/virtualMachines/',variables('virtualMachineName'),'/extensions/IaaSAntimalware')]"
+          ],
+          "properties": {
+            "publisher": "Microsoft.Powershell",
+            "type": "DSC",
+            "typeHandlerVersion": "2.19",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "ModulesUrl": "https://raw.githubusercontent.com/andersidahl/Azure/master/CreateADPDC.zip",
+              "ConfigurationFunction": "CreateADPDC.ps1\\CreateADPDC",
+              "Properties": {
+                "DomainName": "[variables('domainName')]",
+                "AdminCreds": {
+                  "UserName": "[variables('adminUsername')]",
+                  "Password": "PrivateSettingsRef:AdminPassword"
+                }
+              }
+            },
+            "protectedSettings": {
+              "Items": {
+                "AdminPassword": "[parameters('adminPassword')]"
+              }
+            }
+          }
+        },
+
+		
+		
+		{
+		  "name": "[concat(variables('virtualMachineName'),'/IaaSAntimalware')]",
+		  "type": "Microsoft.Compute/virtualMachines/extensions",
+		  "location": "[resourceGroup().location]",
+		  "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', variables('virtualMachineName'))]",
+            "[concat('Microsoft.Compute/virtualMachines/',variables('virtualMachineName'),'/extensions/', variables('diagnosticsExtensionName'))]",
+			"[concat('Microsoft.Compute/virtualMachines/',variables('virtualMachineName'),'/extensions/SqlIaasExtension')]"
+          ],
+		  "apiVersion": "2015-06-15",
+		  "properties": {
+			"publisher": "Microsoft.Azure.Security",
+			"type": "IaaSAntimalware",
+			"typeHandlerVersion": "1.3",
+			"autoUpgradeMinorVersion": true,
+			"settings": {
+			  "AntimalwareEnabled": true,
+			  "RealtimeProtectionEnabled": "true",
+			  "ScheduledScanSettings": {
+				"isEnabled": "false",
+				"day": "7",
+				"time": "120",
+				"scanType": "Quick"
+			  },
+			  "Exclusions": {
+				"Extensions": "",
+				"Paths": "",
+				"Processes": ""
+			  }
+			}
+		  }
+		}
+		
+		
+		
+    ],
+    "outputs": {
+        "adminUsername": {
+            "type": "string",
+            "value": "[variables('adminUsername')]"
+        },
+		"domainName": {
+			"type": "string",
+			"value": "[variables('domainName')]"
+		},
+		"sqlAuthenticationLogin": {
+			"type": "string",
+			"value": "[variables('sqlAuthenticationLogin')]"
+		}
+    }
+}

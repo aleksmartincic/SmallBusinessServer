@@ -1,0 +1,3 @@
+Add-AzureRmAccount
+New-AzureRmResourceGroup -Name RG-AC -Location "West Europe"
+New-AzureRmResourceGroupDeployment -ResourceGroupName RG-AC -TemplateFile DeployAmestoCloud_SBS.json
